@@ -1,0 +1,10 @@
+{
+    "discord_bot_token": "",
+    "twitch_client_id": "",
+    "twitch_client_secret": "",
+    "access_token": "Leave blank",
+    "bot_owners": [
+    ],
+    "uptime_heartbeat_url": "",
+    "uptime_heartbeat_frequency_every_x_minutes": 0
+}

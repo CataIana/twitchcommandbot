@@ -1,0 +1,6 @@
+__pycache__
+config.json
+connections.json
+groups.json
+permissions.json
+test.py

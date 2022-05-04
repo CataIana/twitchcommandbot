@@ -1,0 +1,5 @@
+disnake==2.4.0
+aiofiles
+dateutil
+websockets
+munch
