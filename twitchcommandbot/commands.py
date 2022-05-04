@@ -4,8 +4,6 @@ from twitchcommandbot.subclasses import ApplicationCustomContext
 from twitchcommandbot import NotFound, NotConnected, NoPermissions
 import aiofiles
 import json
-from random import choice
-from string import ascii_letters
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from main import TwitchCommandBot
