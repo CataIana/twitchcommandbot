@@ -6,7 +6,7 @@ from .exceptions import NotConnected, AlreadyConnected
 import asyncio
 from time import time
 from twitchcommandbot.user import User
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, List
 if TYPE_CHECKING:
     from main import TwitchCommandBot
 
@@ -14,7 +14,7 @@ class TwitchIRC(commands.Cog):
     __host = "wss://irc-ws.chat.twitch.tv"
     __port = 443
 
-    def __init__(self, bot, guild: Guild, user: User, oauth: str, connected_channels: list[User]):
+    def __init__(self, bot, guild: Guild, user: User, oauth: str, connected_channels: List[User]):
         self.bot: TwitchCommandBot = bot
         self.loop: asyncio.AbstractEventLoop = bot.loop
         self._ready = asyncio.Event()
@@ -42,7 +42,7 @@ class TwitchIRC(commands.Cog):
         return self.__socket.closed
 
     @property
-    def channels(self) -> list[User]:
+    def channels(self) -> List[User]:
         return self.__connected_channels
 
     async def kill_tasks(self):

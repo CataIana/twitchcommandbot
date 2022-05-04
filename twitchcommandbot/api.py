@@ -6,7 +6,7 @@ from disnake import HTTPException
 from aiohttp import ClientSession
 from .user import PartialUser, User
 from .exceptions import BadAuthorization, BadRequest, NotFound
-from typing import Union, List
+from typing import Union, List, Dict
 if TYPE_CHECKING:
     from main import TwitchCommandBot
 
@@ -32,7 +32,7 @@ class http:
         self.bot.add_listener(self._make_session, 'on_connect')
 
     @property
-    def headers(self) -> dict:
+    def headers(self) -> Dict:
         return {"Authorization": f"Bearer {self.access_token}", "Client-Id": self.client_id}
 
     async def _make_session(self):
@@ -99,7 +99,7 @@ class http:
         json_data = j["data"][0]
         return User(**json_data)
 
-    async def validate_token(self, user: User, token: str, required_scopes: list[str] = None):
+    async def validate_token(self, user: User, token: str, required_scopes: List[str] = None):
         stripped_token = token.split("oauth:")[-1]
         r = await self.session.get(f"https://id.twitch.tv/oauth2/validate", headers={"Authorization": f"Bearer {stripped_token}"})
         if r.status == 200:
