@@ -1,5 +1,5 @@
 disnake==2.4.0
 aiofiles
-dateutil
+python-dateutil
 websockets
 munch

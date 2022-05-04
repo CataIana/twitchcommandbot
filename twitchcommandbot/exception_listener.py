@@ -13,12 +13,6 @@ class ErrorListener(commands.Cog):
         super().__init__()
 
     @commands.Cog.listener()
-    async def on_error(self, event, *args, **kwargs):
-        channel = self.bot.get_guild(749646865531928628).get_channel(763351494685884446)
-        self.bot.log.error(format_exc())
-        await channel.send(f"```python\n{format_exc()[:1982]}\n```")
-
-    @commands.Cog.listener()
     async def on_slash_command_error(self, ctx: ApplicationCustomContext, exception):
         if isinstance(exception, (commands.MissingPermissions, commands.NotOwner, commands.MissingRole, commands.CheckFailure, 
                                     commands.BadArgument, AlreadyConnected, NotConnected, NotFound, commands.UserNotFound, 

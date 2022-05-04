@@ -79,6 +79,8 @@ class IRCCommands(commands.Cog):
                 auth = {}
             except json.decoder.JSONDecodeError:
                 auth = {}
+            if ctx.author.guild_permissions.administrator:
+                return True
             if ctx.author.id in permissions.get(str(ctx.guild.id), []):
                 return True
             if ctx.author.id in auth.get("bot_owners", []):
