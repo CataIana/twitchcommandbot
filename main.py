@@ -11,7 +11,7 @@ from twitchcommandbot.exceptions import TokenExpired
 from twitchcommandbot.subclasses import CustomConnectionState
 from twitchcommandbot import TwitchIRC, http, User, NotFound
 import aiofiles
-from typing import TypeVar, Type, Any
+from typing import TypeVar, Type, Any, Dict
 
 ACXT = TypeVar("ACXT", bound="disnake.ApplicationCommandInteraction")
 class TwitchCommandBot(commands.InteractionBot):
@@ -22,7 +22,7 @@ class TwitchCommandBot(commands.InteractionBot):
         intents.guilds = True
 
         with open("config.json") as f:
-            self.auth: dict = json.load(f)
+            self.auth = json.load(f)
         super().__init__(intents=intents, owner_ids=self.auth.get("bot_owners", []))
         self._sync_commands_debug = True
 
@@ -51,7 +51,7 @@ class TwitchCommandBot(commands.InteractionBot):
         self.load_extension(f"twitchcommandbot.client_cleanup")
         self.load_extension(f"twitchcommandbot.token_maintainer")
 
-        self.irc_clients: dict[disnake.Guild, dict[str, TwitchIRC]] = {}
+        self.irc_clients: Dict[disnake.Guild, Dict[str, TwitchIRC]] = {}
         self.application_invoke = self.process_application_commands
         self.loop.create_task(self.robot_heartbeat())
 
