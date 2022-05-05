@@ -124,7 +124,7 @@ class IRCCommands(commands.Cog):
         connections[str(ctx.guild.id)][str(user.id)] = {"username": username, "access_token": oauth_token, "joined_channels": [user.id]}
         async with aiofiles.open("connections.json", "w") as f:
             await f.write(json.dumps(connections, indent=4))
-        await self.bot.get_irc_client(ctx.guild, user)
+        self.bot.loop.create_task(self.bot.get_irc_client(ctx.guild, user))
         self.bot.log.info(f"Added new client \"{username}\" to guild {ctx.guild}")
         await ctx.send("Client successfully added!", ephemeral=True)
 
