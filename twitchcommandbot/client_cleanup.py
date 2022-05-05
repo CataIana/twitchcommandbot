@@ -18,8 +18,8 @@ class ClientCleanup(commands.Cog):
         self.bot.log.debug("Running client cleanup")
         for guild in list(self.bot.irc_clients.values()):
             for client in list(guild.values()):
-                # If client inactive for more than 20 minutes
-                if (client.last_activity + 1200) < time():
+                # If client inactive for more than 1 hour
+                if (client.last_activity + 3600) < time():
                     self.bot.log.info(f"Closing client \"{client.user.username}\" in {client.guild} due to inactivity")
                     await client.close()
 
