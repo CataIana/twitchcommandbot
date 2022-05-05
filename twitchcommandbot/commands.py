@@ -98,17 +98,17 @@ class IRCCommands(commands.Cog):
         try:
             user = await self.bot.api.get_user(user_login=username)
         except NotFound:
-            raise commands.BadArgument("User does not exist!")
+            return await ctx.send("User does not exist!", ephemeral=True)
 
         try:
             await self.bot.get_irc_client(ctx.guild, user)
         except commands.UserNotFound:
             pass
         else:
-            raise commands.BadArgument("User has already been setup!")
+            return await ctx.send("User has already been setup!", ephemeral=True)
 
         if await self.bot.api.validate_token(user, oauth_token, required_scopes=["chat:read", "chat:edit"]) == False:
-            raise commands.BadArgument("Provided token is not valid, does not match the provided username, or does not contain the required scopes!")
+            return await ctx.send("Provided token is not valid, does not match the provided username, or does not contain the required scopes!", ephemeral=True)
 
         try:
             async with aiofiles.open("connections.json") as f:
@@ -132,7 +132,7 @@ class IRCCommands(commands.Cog):
         try:
             user = await self.bot.api.get_user(user_login=username)
         except NotFound:
-            raise commands.BadArgument("User does not exist!")
+            return await ctx.send("User does not exist!", ephemeral=True)
 
         try:
             client = await self.bot.get_irc_client(ctx.guild, user, create_new=False)
@@ -150,7 +150,7 @@ class IRCCommands(commands.Cog):
         try:
             del connections[str(ctx.guild.id)][str(user.id)]
         except KeyError:
-            raise commands.BadArgument("User not setup with bot!")
+            return await ctx.send("User not setup with bot!", ephemeral=True)
         if connections[str(ctx.guild.id)] == {}:
             del connections[str(ctx.guild.id)]
 
@@ -164,7 +164,7 @@ class IRCCommands(commands.Cog):
         try:
             user = await self.bot.api.get_user(user_login=username)
         except NotFound:
-            raise commands.BadArgument("User does not exist!")
+            return await ctx.send("User does not exist!", ephemeral=True)
 
         try:
             async with aiofiles.open("connections.json") as f:
@@ -175,7 +175,7 @@ class IRCCommands(commands.Cog):
             connections = {}
 
         if str(user.id) not in connections[str(ctx.guild.id)].values():
-            raise commands.BadArgument("User not setup with bot!")
+            return await ctx.send("User not setup with bot!", ephemeral=True)
 
         try:
             client = await self.bot.get_irc_client(ctx.guild, user)
@@ -186,7 +186,7 @@ class IRCCommands(commands.Cog):
             pass
 
         if await self.bot.api.validate_token(user, oauth_token, required_scopes=["chat:read", "chat:edit"]) == False:
-            raise commands.BadArgument("Provided token is not valid, does not match the provided username, or does not contain the required scopes!")
+            return await ctx.send("Provided token is not valid, does not match the provided username, or does not contain the required scopes!", ephemeral=True)
 
         connections[str(ctx.guild.id)][str(user.id)]["access_token"] = oauth_token
         async with aiofiles.open("connections.json", "w") as f:
@@ -290,7 +290,7 @@ class IRCCommands(commands.Cog):
                 await client.send(channel, command)
             c += 1
         self.bot.log.info(f"Sent message with all clients in {ctx.guild}")
-        await ctx.send(f"Sent to {c} channel{'s' if c != 1 else ''}")
+        await ctx.send(f"Sent message `{command}` to {c} channel{'s' if c != 1 else ''}")
 
     @sendirc.sub_command(name="group", description="Send a command in all channels in a specified group")
     async def send_group(self, ctx: ApplicationCustomContext, group_name: str = commands.Param(autocomplete=group_autocomplete), command: str = commands.Param()):
@@ -314,7 +314,7 @@ class IRCCommands(commands.Cog):
                 await client.send(channel, command)
             c += 1
         self.bot.log.info(f"Sent message to all clients in group {group_name} from {client.user.username} in guild {ctx.guild}")
-        await ctx.send(f"Sent to {c} channel{'s' if c != 1 else ''} in group \"{group_name}\"")
+        await ctx.send(f"Sent message `{command}` to {c} channel{'s' if c != 1 else ''} in group \"{group_name}\"")
 
     @sendirc.sub_command(name="channel", description="Send a message in a specific channel")
     #async def send_channel(self, ctx: ApplicationCustomContext, user: str = commands.Param(description="The authorized user", autocomplete=channel_autocomplete), channel: str = commands.Param(autocomplete=joined_channels_autocomplete), command: str = commands.Param()):
@@ -343,7 +343,7 @@ class IRCCommands(commands.Cog):
             await client.send(channel, command)
             await ctx.send(f"Joined and sent message to #{channel.name}")
         else:
-            await ctx.send(f"Sent message to #{channel.name}")
+            await ctx.send(f"Sent message `{command}` to #{channel.name}")
         self.bot.log.info(f"Sent message in {channel.username} from {client.user.username} from guild {ctx.guild}")
 
     @commands.slash_command()
@@ -505,7 +505,7 @@ class IRCCommands(commands.Cog):
             auth = {}
         if user.id in auth.get("bot_owners", []) or user.id in permissions.get(str(ctx.guild.id), []):
             return await ctx.send("User already has access to the bot")
-        if str(ctx.guild.id) not in permissions.values():
+        if str(ctx.guild.id) not in permissions.keys():
             permissions[str(ctx.guild.id)] = []
         permissions[str(ctx.guild.id)].append(user.id)
         async with aiofiles.open("permissions.json", "w") as f:

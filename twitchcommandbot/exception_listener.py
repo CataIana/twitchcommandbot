@@ -25,7 +25,7 @@ class ErrorListener(commands.Cog):
             err_msg = f"There was an error executing this command.\n`{type(exception).__name__}: {exception}`"
         else:
             err_msg = f"There was an error executing this command."
-        await ctx.send(err_msg)
+        await ctx.send(err_msg, ephemeral=True)
 
         exc = ''.join(format_exception(type(exception), exception, exception.__traceback__))
         self.bot.log.error(f"Ignoring exception in command {ctx.application_command.name}:\n{exc}")
