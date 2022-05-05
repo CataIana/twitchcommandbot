@@ -124,6 +124,7 @@ class IRCCommands(commands.Cog):
         connections[str(ctx.guild.id)][str(user.id)] = {"username": username, "access_token": oauth_token, "joined_channels": [user.id]}
         async with aiofiles.open("connections.json", "w") as f:
             await f.write(json.dumps(connections, indent=4))
+        await self.bot.get_irc_client(ctx.guild, user)
         self.bot.log.info(f"Added new client \"{username}\" to guild {ctx.guild}")
         await ctx.send("Client successfully added!", ephemeral=True)
 
@@ -193,6 +194,22 @@ class IRCCommands(commands.Cog):
             await f.write(json.dumps(connections, indent=4))
         self.bot.log.info(f"Updated client \"{username}\" in guild {ctx.guild}")
         await ctx.send("Client successfully updated!", ephemeral=True)
+
+    @client.sub_command(name="list", description="List all setup clients in the server")
+    async def client_list(self, ctx: ApplicationCustomContext):
+        try:
+            async with aiofiles.open("connections.json") as f:
+                connections = json.loads(await f.read())
+        except FileNotFoundError:
+            connections = {}
+        except json.decoder.JSONDecodeError:
+            connections = {}
+
+        if connections.get(str(ctx.guild.id), None) is None:
+            return await ctx.send("No clients have been setup in this server!")
+
+        users = await self.bot.api.get_users(user_ids=[u for u in connections[str(ctx.guild.id)].keys() if u != "expiry_channel"])
+        await ctx.send(f"There are currently {len(users)} client{'s' if len(users) != 1 else ''} setup in this server:\n**Clients:** {', '.join([user.username for user in users])}", ephemeral=True)
 
     # @commands.slash_command(description="Have a client join the provided twitch channel")
     # @has_permissions()

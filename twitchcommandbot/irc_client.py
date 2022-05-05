@@ -70,6 +70,8 @@ class TwitchIRC(commands.Cog):
                     self.bot.dispatch("irc_part", self.user, stripped_message.split(' ')[-1].lstrip("#"))
             except ConnectionClosed:
                 await self.kill_tasks()
+                if self._ready.is_set():
+                    await self.connect()
 
     async def join(self, channel: User):
         def check(u, c):
@@ -103,35 +105,49 @@ class TwitchIRC(commands.Cog):
         await self.__socket.send(f"PRIVMSG #{channel.username} :{message}")
 
     async def connect(self):
-        failed_attempts = 0
-        while not self.bot._closed:  # Not sure if it works, but an attempt at a connecting backoff
-            self.__socket = await client.connect(f"{self.__host}:{self.__port}")
-            if self.__socket.closed:
-                if 2**failed_attempts > 128:
-                    await asyncio.sleep(120)
+        while not self.bot._closed:
+            failed_attempts = 0
+            while not self.bot._closed:  # Not sure if it works, but an attempt at a connecting backoff
+                self.__socket = await client.connect(f"{self.__host}:{self.__port}")
+                if self.__socket.closed:
+                    if 2**failed_attempts > 128:
+                        await asyncio.sleep(120)
+                    else:
+                        await asyncio.sleep(2**failed_attempts)
+                    failed_attempts += 1 # Continue to back off exponentially with every failed connection attempt up to 2 minutes
+                    self.bot.log.info(f"{self.__guild.name} ({self.__user.username}): {failed_attempts} failed attempts to connect.")
                 else:
-                    await asyncio.sleep(2**failed_attempts)
-                failed_attempts += 1 # Continue to back off exponentially with every failed connection attempt up to 2 minutes
-                self.bot.log.info(f"{self.__guild.name} ({self.__user.username}): {failed_attempts} failed attempts to connect.")
-            else:
-                break
-        self.bot.log.info(f"{self.__guild.name} ({self.__user.username}): Connected to websocket")
-        await self.__socket.send(f"PASS {self.__oauth}\n")
-        await self.__socket.send(f"NICK {self.__user.username}\n")
+                    break
+            self.bot.log.info(f"{self.__guild.name} ({self.__user.username}): Connected to websocket")
+            await self.__socket.send(f"PASS {self.__oauth}\n")
+            await self.__socket.send(f"NICK {self.__user.username}\n")
 
-        self.__tasks = [
-            self.loop.create_task(self.message_reciever())
-        ]
-        def connect_check(u):
-            return u == self.user
-        await self.bot.wait_for("irc_connect", check=connect_check, timeout=8)
+            self.__tasks = [
+                self.loop.create_task(self.message_reciever())
+            ]
+            def connect_check(u):
+                return u == self.user
+            try:
+                await self.bot.wait_for("irc_connect", check=connect_check, timeout=8)
+            except asyncio.TimeoutError:
+                self.bot.log.info(f"{self.__guild.name} ({self.__user.username}): Failed to connect. Reconnecting...")
+                await self.kill_tasks()
+                await self.__socket.close()
+                continue
 
-        for channel in self.__connected_channels:
-            def check(u, c):
-                return u == self.user, c == channel
-            await self.__socket.send(f"JOIN #{channel.username}\n")
-            await self.bot.wait_for("irc_join", check=check, timeout=8)
-            await asyncio.sleep(1)
+            for channel in self.__connected_channels:
+                def check(u, c):
+                    return u == self.user, c == channel
+                while True:
+                    await self.__socket.send(f"JOIN #{channel.username}\n")
+                    try:
+                        await self.bot.wait_for("irc_join", check=check, timeout=8)
+                    except asyncio.TimeoutError:
+                        self.bot.log.info(f"{self.__guild.name} ({self.__user.username}): Failed to join channel. Retrying...")
+                    else:
+                        break
+                await asyncio.sleep(1)
+            break
         self.bot.log.info(f"{self.__guild.name} ({self.__user.username}): Joined channels ({', '.join([c.name for c in self.__connected_channels])})")
         self._ready.set()
         # try:
@@ -145,4 +161,5 @@ class TwitchIRC(commands.Cog):
         self._ready.clear()
         if not self.__socket.closed:
             self.bot.log.info(f"{self.__guild.name} ({self.__user.username}): Disconnecting from websocket")
+            await self.kill_tasks()
             await self.__socket.close()

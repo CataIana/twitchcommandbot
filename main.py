@@ -48,7 +48,7 @@ class TwitchCommandBot(commands.InteractionBot):
         self.load_extension(f"twitchcommandbot.etc_commands")
         self.load_extension(f"twitchcommandbot.commands")
         self.load_extension(f"twitchcommandbot.exception_listener")
-        self.load_extension(f"twitchcommandbot.client_cleanup")
+        #self.load_extension(f"twitchcommandbot.client_cleanup")
         self.load_extension(f"twitchcommandbot.token_maintainer")
 
         self.irc_clients: Dict[disnake.Guild, Dict[str, TwitchIRC]] = {}
@@ -68,11 +68,12 @@ class TwitchCommandBot(commands.InteractionBot):
     @commands.Cog.listener()
     async def on_connect(self):
         self.aSession: ClientSession = ClientSession() #Make the aiohttp session asap
+        await self.start_all_clients()
 
     @commands.Cog.listener()
     async def on_ready(self):
         self.log.info(f"------ Logged in as {self.user.name} - {self.user.id} ------")
-        self.log.info(f"Invite URL: https://discord.com/oauth2/authorize?client_id={self.user.id}&permissions=3072&scope=applications.commands")
+        self.log.info(f"Invite URL: https://discord.com/oauth2/authorize?client_id={self.user.id}&permissions=3072&scope=applications.commands+bot")
 
     def _get_state(self, **options: Any) -> CustomConnectionState:
         return CustomConnectionState(
@@ -135,6 +136,41 @@ class TwitchCommandBot(commands.InteractionBot):
                 await self.aSession.get(self.robot_heartbeat_url)
             # Sleep for defined value
             await asyncio.sleep(self.robot_heartbeat_frequency*60)
+
+    async def start_all_clients(self):
+        self.log.info("Starting IRC Clients. This may take some time")
+        try:
+            async with aiofiles.open("connections.json") as f:
+                connections = json.loads(await f.read())
+        except FileNotFoundError:
+            connections = {}
+        except json.decoder.JSONDecodeError:
+            connections = {}
+        for guild_id, guild_data in connections.items():
+            guild = self.get_guild(int(guild_id))
+            if guild:
+                for user_id, user_data in guild_data.items():
+                    try:
+                        int(user_id)
+                    except ValueError:
+                        continue
+                    user = await self.api.get_user(user_id=user_id)
+                    try:
+                        await self.api.validate_token(user, user_data["access_token"], required_scopes=["chat:read", "chat:edit"])
+                    except TokenExpired:
+                        expiry_channel = connections[str(guild.id)].get("expiry_channel", None)
+                        if expiry_channel:
+                            ex = self.get_channel(expiry_channel)
+                            try:
+                                await ex.send(f"Token for client {user.username} has expired! Please update the token")
+                            except disnake.Forbidden:
+                                pass
+                            except disnake.HTTPException:
+                                pass
+                    else:
+                        await self.get_irc_client(guild, user)
+                    await asyncio.sleep(2)
+        self.log.info("Finished starting IRC clients")
     
 
 if __name__ == "__main__":
