@@ -15,30 +15,6 @@ class ErrorListener(commands.Cog):
         super().__init__()
 
     @commands.Cog.listener()
-    async def on_error(self, ctx: ApplicationCustomContext, exception):
-        if isinstance(exception, TokenExpired):
-            try:
-                async with aiofiles.open("connections.json") as f:
-                    connections = json.loads(await f.read())
-            except FileNotFoundError:
-                connections = {}
-            except json.decoder.JSONDecodeError:
-                connections = {}
-            if not connections[str(exception.guild.id)][str(exception.user.id)].get("expiry_notified", False):
-                connections[str(exception.guild.id)][str(exception.user.id)]["expiry_notified"] = True
-                async with aiofiles.open("connections.json", "w") as f:
-                    await f.write(json.dumps(connections, indent=4))
-                expiry_channel = connections[str(exception.guild.id)].get("expiry_channel", None)
-                if expiry_channel:
-                    ex = self.bot.get_channel(expiry_channel)
-                    try:
-                        await ex.send(f"Token for client {exception.user.username} has expired! Please update the token")
-                    except Forbidden:
-                        pass
-                    except HTTPException:
-                        pass
-
-    @commands.Cog.listener()
     async def on_slash_command_error(self, ctx: ApplicationCustomContext, exception):
         if isinstance(exception, TokenExpired):
             try:

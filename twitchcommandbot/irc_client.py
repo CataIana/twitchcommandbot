@@ -1,11 +1,13 @@
-from disnake import Guild
+from disnake import Guild, Forbidden, HTTPException
 from disnake.ext import commands
 from websockets import client
-from websockets.exceptions import ConnectionClosed
-from .exceptions import NotConnected, AlreadyConnected, TokenExpired
+from websockets.exceptions import ConnectionClosed, ConnectionClosedError
+from .exceptions import NotConnected, AlreadyConnected
 import asyncio
 from time import time
 from twitchcommandbot.user import User
+import json
+import aiofiles
 from typing import TYPE_CHECKING, List
 if TYPE_CHECKING:
     from main import TwitchCommandBot
@@ -106,11 +108,12 @@ class TwitchIRC(commands.Cog):
 
     async def connect(self):
         while not self.bot._closed:
-            self._ready.clear()
             if await self.bot.api.validate_token(self.user, self.__oauth, required_scopes=["chat:read", "chat:edit"]) == False:
                 self.bot.log.warning(f"{self.__guild.name} ({self.__user.username}): Token invalid, aborting connect")
+                await self.handle_revoked_token()
                 await self.close()
-                raise TokenExpired(self.user, self.guild)
+                return
+            self._ready.clear()
             failed_attempts = 0
             while not self.bot._closed:  # Not sure if it works, but an attempt at a connecting backoff. Stolen from my modlogging script
                 self.__socket = await client.connect(f"{self.__host}:{self.__port}")
@@ -160,11 +163,33 @@ class TwitchIRC(commands.Cog):
         #     await asyncio.wait(self.__tasks) # Tasks will run until the connection closes, we need to re-establish it if it closes
         # except asyncio.exceptions.CancelledError:
         #     pass
+
+    async def handle_revoked_token(self):
+        try:
+            async with aiofiles.open("connections.json") as f:
+                connections = json.loads(await f.read())
+        except FileNotFoundError:
+            connections = {}
+        except json.decoder.JSONDecodeError:
+            connections = {}
+        if not connections[str(self.guild.id)][str(self.user.id)].get("expiry_notified", False):
+            connections[str(self.guild.id)][str(self.user.id)]["expiry_notified"] = True
+            async with aiofiles.open("connections.json", "w") as f:
+                await f.write(json.dumps(connections, indent=4))
+            expiry_channel = connections[str(self.guild.id)].get("expiry_channel", None)
+            if expiry_channel:
+                ex = self.bot.get_channel(expiry_channel)
+                try:
+                    await ex.send(f"Token for client {self.user.username} has expired! Please update the token")
+                except Forbidden:
+                    pass
+                except HTTPException:
+                    pass
     
     async def close(self):
         await self.wait_until_ready()
-        del self.bot.irc_clients[self.__guild][self.__user.username]
         self._ready.clear()
+        del self.bot.irc_clients[self.__guild][self.__user.username]
         if not self.__socket.closed:
             self.bot.log.info(f"{self.__guild.name} ({self.__user.username}): Disconnecting from websocket")
             await self.kill_tasks()
