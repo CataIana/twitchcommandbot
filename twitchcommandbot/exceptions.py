@@ -1,4 +1,5 @@
 from disnake.ext import commands
+from disnake import Guild
 from twitchcommandbot.user import User
 
 
@@ -29,5 +30,7 @@ class NoPermissions(TwitchCommandBotException):
         super().__init__("You do not have permissions use this command")
 
 class TokenExpired(TwitchCommandBotException):
-    def __init__(self, message: str):
-        super().__init__(message or "The token for this account has expired")
+    def __init__(self, user: User, guild: Guild):
+        super().__init__(f"Token has expired for client {user.username}! Please update the token")
+        self.user: User = user
+        self.guild: Guild = guild

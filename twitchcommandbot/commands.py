@@ -1,10 +1,11 @@
 from disnake import Member, TextChannel
 from disnake.ext import commands
+from twitchcommandbot.exceptions import TokenExpired
 from twitchcommandbot.subclasses import ApplicationCustomContext
-from twitchcommandbot import NotFound, NotConnected, NoPermissions
+from twitchcommandbot import NotFound, NotConnected, NoPermissions, User
 import aiofiles
 import json
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, List
 if TYPE_CHECKING:
     from main import TwitchCommandBot
 
@@ -104,6 +105,8 @@ class IRCCommands(commands.Cog):
             await self.bot.get_irc_client(ctx.guild, user)
         except commands.UserNotFound:
             pass
+        except TokenExpired:
+            return await ctx.send("User has already been setup! If you are trying to update the token use /client update!", ephemeral=True)
         else:
             return await ctx.send("User has already been setup!", ephemeral=True)
 
@@ -138,7 +141,11 @@ class IRCCommands(commands.Cog):
         try:
             client = await self.bot.get_irc_client(ctx.guild, user, create_new=False)
             await client.close()
+        except commands.UserNotFound:
+            pass
         except NotFound:
+            pass
+        except TokenExpired:
             pass
 
         try:
@@ -175,8 +182,11 @@ class IRCCommands(commands.Cog):
         except json.decoder.JSONDecodeError:
             connections = {}
 
-        if str(user.id) not in connections[str(ctx.guild.id)].values():
+        if str(user.id) not in connections[str(ctx.guild.id)].keys():
             return await ctx.send("User not setup with bot!", ephemeral=True)
+
+        if await self.bot.api.validate_token(user, oauth_token, required_scopes=["chat:read", "chat:edit"]) == False:
+            return await ctx.send("Provided token is not valid, does not match the provided username, or does not contain the required scopes!", ephemeral=True)
 
         try:
             client = await self.bot.get_irc_client(ctx.guild, user)
@@ -185,13 +195,15 @@ class IRCCommands(commands.Cog):
             pass
         except NotFound:
             pass
-
-        if await self.bot.api.validate_token(user, oauth_token, required_scopes=["chat:read", "chat:edit"]) == False:
-            return await ctx.send("Provided token is not valid, does not match the provided username, or does not contain the required scopes!", ephemeral=True)
+        except TokenExpired:
+            pass
 
         connections[str(ctx.guild.id)][str(user.id)]["access_token"] = oauth_token
+        if connections[str(ctx.guild.id)][str(user.id)].get("expiry_notified", None):
+            del connections[str(ctx.guild.id)][str(user.id)]["expiry_notified"]
         async with aiofiles.open("connections.json", "w") as f:
             await f.write(json.dumps(connections, indent=4))
+        self.bot.loop.create_task(self.bot.get_irc_client(ctx.guild, user))
         self.bot.log.info(f"Updated client \"{username}\" in guild {ctx.guild}")
         await ctx.send("Client successfully updated!", ephemeral=True)
 
@@ -301,13 +313,25 @@ class IRCCommands(commands.Cog):
         users = [u for u in await self.bot.api.get_users(user_ids=[k for k in connections.get(str(ctx.guild.id), {}).keys() if k != "expiry_channel"])]
 
         c = 0
+        not_sent: List[User] = []
         for user in users:
-            client = await self.bot.get_irc_client(ctx.guild, user)
-            for channel in client.channels:
-                await client.send(channel, command)
+            try:
+                client = await self.bot.get_irc_client(ctx.guild, user)
+                for channel in client.channels:
+                    await client.send(channel, command)
+            except TokenExpired:
+                not_sent.append(user)
+            except commands.UserNotFound:
+                not_sent.append(user)
+            except NotFound:
+                not_sent.append(user)
             c += 1
         self.bot.log.info(f"Sent message with all clients in {ctx.guild}")
-        await ctx.send(f"Sent message `{command}` to {c} channel{'s' if c != 1 else ''}")
+        if not_sent:
+            extra = f". Failed to sent message to {len(not_sent)} client{'s' if len(not_sent) != 1 else ''} ({', '.join([u.username for u in not_sent])})"
+        else:
+            extra = ""
+        await ctx.send(f"Sent message `{command}` to {c} channel{'s' if c != 1 else ''}{extra}")
 
     @sendirc.sub_command(name="group", description="Send a command in all channels in a specified group")
     async def send_group(self, ctx: ApplicationCustomContext, group_name: str = commands.Param(autocomplete=group_autocomplete), command: str = commands.Param()):
@@ -325,13 +349,25 @@ class IRCCommands(commands.Cog):
 
         users = await self.bot.api.get_users(user_ids=groups[str(ctx.guild.id)][group_name])
         c = 0
+        not_sent: List[User] = []
         for user in users:
-            client = await self.bot.get_irc_client(ctx.guild, user)
-            for channel in client.channels:
-                await client.send(channel, command)
+            try:
+                client = await self.bot.get_irc_client(ctx.guild, user)
+                for channel in client.channels:
+                    await client.send(channel, command)
+            except TokenExpired:
+                not_sent.append(user)
+            except commands.UserNotFound:
+                not_sent.append(user)
+            except NotFound:
+                not_sent.append(user)
             c += 1
         self.bot.log.info(f"Sent message to all clients in group {group_name} from {client.user.username} in guild {ctx.guild}")
-        await ctx.send(f"Sent message `{command}` to {c} channel{'s' if c != 1 else ''} in group \"{group_name}\"")
+        if not_sent:
+            extra = f". Failed to sent message to {len(not_sent)} client{'s' if len(not_sent) != 1 else ''} ({', '.join([u.username for u in not_sent])})"
+        else:
+            extra = ""
+        await ctx.send(f"Sent message `{command}` to {c} channel{'s' if c != 1 else ''} in group \"{group_name}\"{extra}")
 
     @sendirc.sub_command(name="channel", description="Send a message in a specific channel")
     #async def send_channel(self, ctx: ApplicationCustomContext, user: str = commands.Param(description="The authorized user", autocomplete=channel_autocomplete), channel: str = commands.Param(autocomplete=joined_channels_autocomplete), command: str = commands.Param()):

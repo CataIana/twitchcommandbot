@@ -119,7 +119,12 @@ class TwitchCommandBot(commands.InteractionBot):
 
             token = connections[str(guild.id)][str(user.id)]["access_token"]
             if await self.api.validate_token(user, token, required_scopes=["chat:read", "chat:edit"]) == False:
-                raise TokenExpired(f"Token has expired for client {user.username}! Please update the token")
+                raise TokenExpired(user, guild)
+
+            if connections[str(guild.id)][str(user.id)].get("expiry_notified", None):
+                del connections[str(guild.id)][str(user.id)]["expiry_notified"]
+                async with aiofiles.open("connections.json", "w") as f:
+                    await f.write(json.dumps(connections, indent=4))
 
             channels = await self.api.get_users(user_ids=connections[str(guild.id)][str(user.id)]["joined_channels"])
             # Create new client with provided data
@@ -156,20 +161,27 @@ class TwitchCommandBot(commands.InteractionBot):
                         continue
                     user = await self.api.get_user(user_id=user_id)
                     try:
-                        await self.api.validate_token(user, user_data["access_token"], required_scopes=["chat:read", "chat:edit"])
-                    except TokenExpired:
-                        expiry_channel = connections[str(guild.id)].get("expiry_channel", None)
-                        if expiry_channel:
-                            ex = self.get_channel(expiry_channel)
-                            try:
-                                await ex.send(f"Token for client {user.username} has expired! Please update the token")
-                            except disnake.Forbidden:
-                                pass
-                            except disnake.HTTPException:
-                                pass
-                    else:
                         await self.get_irc_client(guild, user)
-                    await asyncio.sleep(2)
+                        if user_data.get("expiry_notified", False):
+                            del connections[str(guild.id)][str(user.id)]["expiry_notified"]
+                            async with aiofiles.open("connections.json", "w") as f:
+                                await f.write(json.dumps(connections, indent=4))
+                    except TokenExpired:
+                        if not user_data.get("expiry_notified", False):
+                            expiry_channel = connections[str(guild.id)].get("expiry_channel", None)
+                            if expiry_channel:
+                                ex = self.get_channel(expiry_channel)
+                                try:
+                                    await ex.send(f"Token for client {user.username} has expired! Please update the token")
+                                except disnake.Forbidden:
+                                    pass
+                                except disnake.HTTPException:
+                                    pass
+                            connections[str(guild.id)][str(user.id)]["expiry_notified"] = True
+                            async with aiofiles.open("connections.json", "w") as f:
+                                await f.write(json.dumps(connections, indent=4))
+                        self.log.warning(f"{guild.name} ({user.username}): Not starting client due to expired token")
+                    await asyncio.sleep(0.5)
         self.log.info("Finished starting IRC clients")
     
 

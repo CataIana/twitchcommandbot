@@ -2,7 +2,7 @@ from disnake import Guild
 from disnake.ext import commands
 from websockets import client
 from websockets.exceptions import ConnectionClosed
-from .exceptions import NotConnected, AlreadyConnected
+from .exceptions import NotConnected, AlreadyConnected, TokenExpired
 import asyncio
 from time import time
 from twitchcommandbot.user import User
@@ -58,7 +58,7 @@ class TwitchIRC(commands.Cog):
                 stripped_message = message.rstrip("\n")
                 #self.bot.log.info(f"{self.__guild.name} ({self.__user.username}): {stripped_message}")
                 if stripped_message.startswith("PING"):
-                    self.bot.log.info(f"{self.__guild.name} ({self.__user.username}): Pong")
+                    self.bot.log.debug(f"{self.__guild.name} ({self.__user.username}): Pong")
                     await self.__socket.send("PONG :tmi.twitch.tv\n")
                     continue
                 
@@ -106,8 +106,11 @@ class TwitchIRC(commands.Cog):
 
     async def connect(self):
         while not self.bot._closed:
+            if await self.bot.api.validate_token(self.user, self.__oauth, required_scopes=["chat:read", "chat:edit"]) == False:
+                self.bot.log.warning(f"{self.__guild.name} ({self.__user.username}): Token invalid, aborting connect")
+                raise TokenExpired(self.user, self.guild)
             failed_attempts = 0
-            while not self.bot._closed:  # Not sure if it works, but an attempt at a connecting backoff
+            while not self.bot._closed:  # Not sure if it works, but an attempt at a connecting backoff. Stolen from my modlogging script
                 self.__socket = await client.connect(f"{self.__host}:{self.__port}")
                 if self.__socket.closed:
                     if 2**failed_attempts > 128:
@@ -118,7 +121,6 @@ class TwitchIRC(commands.Cog):
                     self.bot.log.info(f"{self.__guild.name} ({self.__user.username}): {failed_attempts} failed attempts to connect.")
                 else:
                     break
-            self.bot.log.info(f"{self.__guild.name} ({self.__user.username}): Connected to websocket")
             await self.__socket.send(f"PASS {self.__oauth}\n")
             await self.__socket.send(f"NICK {self.__user.username}\n")
 
@@ -130,10 +132,11 @@ class TwitchIRC(commands.Cog):
             try:
                 await self.bot.wait_for("irc_connect", check=connect_check, timeout=8)
             except asyncio.TimeoutError:
-                self.bot.log.info(f"{self.__guild.name} ({self.__user.username}): Failed to connect. Reconnecting...")
+                self.bot.log.info(f"{self.__guild.name} ({self.__user.username}): Failed to connect. Retrying...")
                 await self.kill_tasks()
                 await self.__socket.close()
                 continue
+            self.bot.log.info(f"{self.__guild.name} ({self.__user.username}): Connected to websocket")
 
             for channel in self.__connected_channels:
                 def check(u, c):
@@ -146,7 +149,8 @@ class TwitchIRC(commands.Cog):
                         self.bot.log.info(f"{self.__guild.name} ({self.__user.username}): Failed to join channel. Retrying...")
                     else:
                         break
-                await asyncio.sleep(1)
+                if len(self.__connected_channels) > 1:
+                    await asyncio.sleep(0.5)
             break
         self.bot.log.info(f"{self.__guild.name} ({self.__user.username}): Joined channels ({', '.join([c.name for c in self.__connected_channels])})")
         self._ready.set()

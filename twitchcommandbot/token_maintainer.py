@@ -15,7 +15,7 @@ class TokenMaintainer(commands.Cog):
     def cog_unload(self):
         self.maintainer.cancel()
 
-    @tasks.loop(time=time(hour=0, tzinfo=datetime.now().astimezone().tzinfo))
+    @tasks.loop(time=time(hour=0))
     async def maintainer(self):
         await self.bot.wait_until_ready()
         self.bot.log.info("Restarting clients")
