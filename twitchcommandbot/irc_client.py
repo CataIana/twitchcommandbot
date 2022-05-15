@@ -106,8 +106,10 @@ class TwitchIRC(commands.Cog):
 
     async def connect(self):
         while not self.bot._closed:
+            self._ready.clear()
             if await self.bot.api.validate_token(self.user, self.__oauth, required_scopes=["chat:read", "chat:edit"]) == False:
                 self.bot.log.warning(f"{self.__guild.name} ({self.__user.username}): Token invalid, aborting connect")
+                await self.close()
                 raise TokenExpired(self.user, self.guild)
             failed_attempts = 0
             while not self.bot._closed:  # Not sure if it works, but an attempt at a connecting backoff. Stolen from my modlogging script
